@@ -177,40 +177,54 @@ export function buildPlan(parsed: ParsedModel, current: CollectedData): ImportPl
   const warnings: string[] = [];
   let unchangedCount = 0;
 
-  for (const pc of parsed.collections) {
-    if (!idx.collectionNames.has(pc.name)) {
-      const firstMode = pc.modeNames[0] ?? "Mode 1";
-      collectionsToCreate.push(pc.name);
-      createCollectionOps.push({ kind: "createCollection", name: pc.name, firstMode });
-      for (const m of pc.modeNames.slice(1)) {
-        modesToAdd.push({ collection: pc.name, mode: m });
-        addModeOps.push({ kind: "addMode", collection: pc.name, mode: m });
-      }
-    } else {
-      const have = idx.modeNamesByCollection.get(pc.name) ?? new Set<string>();
-      for (const m of pc.modeNames) {
-        if (!hasMode(have, m)) {
-          modesToAdd.push({ collection: pc.name, mode: m });
-          addModeOps.push({ kind: "addMode", collection: pc.name, mode: m });
-        }
-      }
-    }
+  // Resolve each parsed variable to its EFFECTIVE collection: a variable that
+  // matches an existing Figma variable keeps that variable's real collection,
+  // so files whose collection names diverge from the live file (e.g. a legacy
+  // fallback "Theme" vs the real "semantic") update the real variable instead
+  // of spawning a duplicate collection and breaking figma-write's lookup.
+  const ensuredCol = new Set<string>();
+  const ensuredMode = new Set<string>();
 
+  const ensureCollection = (name: string, firstMode: string): void => {
+    if (ensuredCol.has(name)) return;
+    ensuredCol.add(name);
+    if (idx.collectionNames.has(name)) return; // already exists in Figma
+    collectionsToCreate.push(name);
+    createCollectionOps.push({ kind: "createCollection", name, firstMode });
+    ensuredMode.add(`${name}\0${firstMode}`); // firstMode ships with the collection
+  };
+
+  const ensureMode = (collection: string, mode: string): void => {
+    const key = `${collection}\0${mode}`;
+    if (ensuredMode.has(key)) return;
+    ensuredMode.add(key);
+    const have = idx.modeNamesByCollection.get(collection);
+    if (have && hasMode(have, mode)) return; // already present in the existing collection
+    modesToAdd.push({ collection, mode });
+    addModeOps.push({ kind: "addMode", collection, mode });
+  };
+
+  for (const pc of parsed.collections) {
     for (const pv of pc.variables) {
       // Figma variable ids are globally unique, so an id match is authoritative
       // even across collections; fall back to collection+name for foreign ids.
       const match =
         (pv.variableId ? idx.byId.get(pv.variableId) : undefined) ??
         idx.byName.get(`${pv.collectionName}\0${pv.name}`);
+      const effCollection = match ? match.col.name : pc.name;
+      const modeNames = Object.keys(pv.valuesByModeName);
+
+      ensureCollection(effCollection, modeNames[0] ?? "Mode 1");
+      for (const m of modeNames) ensureMode(effCollection, m);
 
       if (!match) {
-        createVariableOps.push({ kind: "createVariable", collection: pc.name, name: pv.name, type: pv.resolvedType });
+        createVariableOps.push({ kind: "createVariable", collection: effCollection, name: pv.name, type: pv.resolvedType });
         const modes: string[] = [];
         for (const [mode, val] of Object.entries(pv.valuesByModeName)) {
-          pushValueOp(pc.name, pv.name, mode, val, setLiteralOps, setAliasOps, resolveTarget);
+          pushValueOp(effCollection, pv.name, mode, val, setLiteralOps, setAliasOps, resolveTarget);
           modes.push(mode);
         }
-        creates.push({ collection: pc.name, name: pv.name, modes });
+        creates.push({ collection: effCollection, name: pv.name, modes });
       } else {
         if (match.v.resolvedType !== pv.resolvedType) {
           warnings.push(`${pv.name}: type ${pv.resolvedType} differs from existing ${match.v.resolvedType}, skipped`);
@@ -223,13 +237,13 @@ export function buildPlan(parsed: ParsedModel, current: CollectedData): ImportPl
             return modeId === undefined ? undefined : match.v.valuesByMode[modeId];
           })();
           if (cur !== undefined && sameValue(idx, cur, val, resolveTarget)) continue;
-          pushValueOp(pc.name, pv.name, mode, val, setLiteralOps, setAliasOps, resolveTarget);
+          pushValueOp(effCollection, pv.name, mode, val, setLiteralOps, setAliasOps, resolveTarget);
           changedModes.push(mode);
         }
         // Additive sync: modes/variables present only in Figma (not in the
         // parsed model) are left untouched — import never deletes.
         if (changedModes.length === 0) unchangedCount += 1;
-        else updates.push({ collection: pc.name, name: pv.name, modes: changedModes });
+        else updates.push({ collection: effCollection, name: pv.name, modes: changedModes });
       }
     }
   }
