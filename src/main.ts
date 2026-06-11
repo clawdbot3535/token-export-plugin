@@ -9,6 +9,9 @@ import {
 import { createGitHubProvider } from "./git/github";
 import { CommitError, type GitFile } from "./git/provider";
 import { normalizePath, type Settings, validateSettings } from "./settings";
+import { buildPlan, type ImportPlan } from "./diff";
+import { applyPlan } from "./figma-write";
+import { type ImportFile, parse } from "./parse";
 
 const SETTINGS_KEY = "tokenexport.settings";
 const TOKEN_KEY = "tokenexport.token";
@@ -47,6 +50,24 @@ async function loadSettings(): Promise<{ settings: Settings | null; tokenSet: bo
   return { settings: settings ?? null, tokenSet: Boolean(token) };
 }
 
+function planSummary(plan: ImportPlan) {
+  return {
+    creates: plan.creates.length,
+    updates: plan.updates.length,
+    unchanged: plan.unchangedCount,
+    collectionsToCreate: plan.collectionsToCreate,
+    modesToAdd: plan.modesToAdd,
+    createNames: plan.creates.map((c) => `${c.collection}/${c.name}`),
+    updateNames: plan.updates.map((c) => `${c.collection}/${c.name}`),
+    warnings: plan.warnings,
+  };
+}
+
+function importError(err: unknown): { kind: string; message: string } {
+  if (err instanceof CommitError) return { kind: err.kind, message: err.message };
+  return { kind: "unexpected", message: err instanceof Error ? err.message : String(err) };
+}
+
 export default function (): void {
   showUI({ width: 320, height: 480 });
 
@@ -71,6 +92,56 @@ export default function (): void {
       emit("ZIP_FILES", buildExport(await collectData()));
     } catch (err) {
       emit("COMMIT_ERROR", { kind: "unexpected", message: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  let lastImportFiles: ImportFile[] | null = null;
+
+  on("IMPORT_GITHUB", async function () {
+    const settings = (await figma.clientStorage.getAsync(SETTINGS_KEY)) as Settings | undefined;
+    const token = (await figma.clientStorage.getAsync(TOKEN_KEY)) as string | undefined;
+    if (!settings || !token) {
+      emit("IMPORT_ERROR", { kind: "auth", message: "Configure repo settings and a token first" });
+      return;
+    }
+    try {
+      const read = await createGitHubProvider().readFiles({
+        owner: settings.owner,
+        repo: settings.repo,
+        branch: settings.branch,
+        path: normalizePath(settings.path),
+        token,
+      });
+      const files: ImportFile[] = read.map((r) => ({ filename: r.filename, json: r.content }));
+      lastImportFiles = files;
+      const plan = buildPlan(parse(files), await collectData());
+      emit("IMPORT_PLAN", planSummary(plan));
+    } catch (err) {
+      emit("IMPORT_ERROR", importError(err));
+    }
+  });
+
+  on("IMPORT_LOCAL", async function (payload: { files: ImportFile[] }) {
+    try {
+      lastImportFiles = payload.files;
+      const plan = buildPlan(parse(payload.files), await collectData());
+      emit("IMPORT_PLAN", planSummary(plan));
+    } catch (err) {
+      emit("IMPORT_ERROR", importError(err));
+    }
+  });
+
+  on("IMPORT_APPLY", async function () {
+    if (!lastImportFiles) {
+      emit("IMPORT_ERROR", { kind: "unexpected", message: "Nothing to apply — preview first" });
+      return;
+    }
+    try {
+      const plan = buildPlan(parse(lastImportFiles), await collectData());
+      const summary = await applyPlan(plan);
+      emit("IMPORT_DONE", summary);
+    } catch (err) {
+      emit("IMPORT_ERROR", importError(err));
     }
   });
 
