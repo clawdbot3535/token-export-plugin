@@ -27,11 +27,10 @@ export async function applyPlan(plan: ImportPlan): Promise<ApplySummary> {
     }
   }
 
-  function modeId(col: VariableCollection, modeName: string): string {
+  function modeId(col: VariableCollection, modeName: string): string | undefined {
     const exact = col.modes.find((m) => m.name === modeName);
     if (exact) return exact.modeId;
-    const ci = col.modes.find((m) => m.name.toLowerCase() === modeName.toLowerCase());
-    return (ci ?? col.modes[0]).modeId;
+    return col.modes.find((m) => m.name.toLowerCase() === modeName.toLowerCase())?.modeId;
   }
 
   function opName(op: ApplyOp): string {
@@ -69,7 +68,12 @@ export async function applyPlan(plan: ImportPlan): Promise<ApplySummary> {
           summary.errors.push(`${op.name}: missing variable/collection for setLiteral`);
           continue;
         }
-        v.setValueForMode(modeId(col, op.mode), op.value as VariableValue);
+        const litMode = modeId(col, op.mode);
+        if (litMode === undefined) {
+          summary.errors.push(`${op.name}: mode "${op.mode}" not found in ${op.collection}`);
+          continue;
+        }
+        v.setValueForMode(litMode, op.value as VariableValue);
         touched.add(`${op.collection}\0${op.name}`);
       } else if (op.kind === "setAlias") {
         const v = varByKey.get(`${op.collection}\0${op.name}`);
@@ -83,7 +87,12 @@ export async function applyPlan(plan: ImportPlan): Promise<ApplySummary> {
           summary.errors.push(`${op.name}: alias target ${op.targetCollection}/${op.targetName} not found`);
           continue;
         }
-        v.setValueForMode(modeId(col, op.mode), figma.variables.createVariableAlias(target));
+        const aliasMode = modeId(col, op.mode);
+        if (aliasMode === undefined) {
+          summary.errors.push(`${op.name}: mode "${op.mode}" not found in ${op.collection}`);
+          continue;
+        }
+        v.setValueForMode(aliasMode, figma.variables.createVariableAlias(target));
         touched.add(`${op.collection}\0${op.name}`);
       }
     } catch (err) {

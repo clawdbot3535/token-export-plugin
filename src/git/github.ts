@@ -158,7 +158,8 @@ export function createGitHubProvider(fetchFn: typeof fetch = fetch): GitProvider
       }
       const files: ReadFile[] = [];
       for (const e of entries) {
-        const content = await callRaw(`${base}/contents/${e.path}?ref=${ref}`, req.token);
+        const encodedPath = e.path.split("/").map(encodeURIComponent).join("/");
+        const content = await callRaw(`${base}/contents/${encodedPath}?ref=${ref}`, req.token);
         files.push({ filename: e.name, content });
       }
       return files;
