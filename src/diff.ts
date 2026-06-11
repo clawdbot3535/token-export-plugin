@@ -73,13 +73,25 @@ function isAlias(v: CollectedValue): v is VariableAliasValue {
   return typeof v === "object" && v !== null && (v as VariableAliasValue).type === "VARIABLE_ALIAS";
 }
 
+// Figma stores color channels as float32; values round-tripped through a token
+// file (or hand-edited to clean decimals like 0.8) differ from the promoted
+// float64 by tiny amounts. Compare within an epsilon to avoid spurious updates.
+const COLOR_EPSILON = 1e-5;
 function colorsEqual(a: { r: number; g: number; b: number; a?: number }, b: RGBA): boolean {
-  return a.r === b.r && a.g === b.g && a.b === b.b && (a.a ?? 1) === b.a;
+  return (
+    Math.abs(a.r - b.r) < COLOR_EPSILON &&
+    Math.abs(a.g - b.g) < COLOR_EPSILON &&
+    Math.abs(a.b - b.b) < COLOR_EPSILON &&
+    Math.abs((a.a ?? 1) - b.a) < COLOR_EPSILON
+  );
 }
 
 function sameValue(idx: CurrentIndex, current: CollectedValue, parsed: ParsedValue): boolean {
   if (parsed.kind === "alias") {
     if (!isAlias(current)) return false;
+    // If the current alias points to a variable outside the local set (e.g. a
+    // library variable, which v1 does not import), it won't be in the index and
+    // the value reads as changed. Acceptable: v1 handles local variables only.
     const target = idx.byId.get(current.id);
     if (!target) return false;
     return target.v.name === parsed.targetName && target.col.name === parsed.targetCollection;
@@ -133,6 +145,8 @@ export function buildPlan(parsed: ParsedModel, current: CollectedData): ImportPl
     }
 
     for (const pv of pc.variables) {
+      // Figma variable ids are globally unique, so an id match is authoritative
+      // even across collections; fall back to collection+name for foreign ids.
       const match =
         (pv.variableId ? idx.byId.get(pv.variableId) : undefined) ??
         idx.byName.get(`${pv.collectionName}\0${pv.name}`);
@@ -160,6 +174,8 @@ export function buildPlan(parsed: ParsedModel, current: CollectedData): ImportPl
           pushValueOp(pc.name, pv.name, mode, val, setLiteralOps, setAliasOps);
           changedModes.push(mode);
         }
+        // Additive sync: modes/variables present only in Figma (not in the
+        // parsed model) are left untouched — import never deletes.
         if (changedModes.length === 0) unchangedCount += 1;
         else updates.push({ collection: pc.name, name: pv.name, modes: changedModes });
       }

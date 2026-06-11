@@ -5,6 +5,8 @@ import type { ParsedModel } from "./parse";
 
 const EMPTY_CURRENT: CollectedData = { collections: [] };
 
+type ParsedModelLiteral = { kind: "literal"; value: { r: number; g: number; b: number; a: number } } | { kind: "alias"; targetCollection: string; targetName: string };
+
 function parsedColor(collection: string, mode: string, name: string, value: ParsedModelLiteral): ParsedModel {
   return {
     warnings: [],
@@ -19,7 +21,6 @@ function parsedColor(collection: string, mode: string, name: string, value: Pars
     ],
   };
 }
-type ParsedModelLiteral = { kind: "literal"; value: { r: number; g: number; b: number; a: number } } | { kind: "alias"; targetCollection: string; targetName: string };
 
 describe("buildPlan — creates", () => {
   it("creates a collection and a variable in a fresh file", () => {
@@ -103,5 +104,45 @@ describe("buildPlan — updates", () => {
     const plan = buildPlan(parsed, current);
     expect(plan.ops).toEqual([]);
     expect(plan.warnings.some((w) => w.includes("type"))).toBe(true);
+  });
+});
+
+describe("buildPlan — alias equality", () => {
+  const current: CollectedData = {
+    collections: [
+      {
+        id: "PC", name: "primitives/color", defaultModeId: "p1", modes: [{ modeId: "p1", name: "Mode 1" }],
+        variables: [
+          { id: "W", name: "color/white", resolvedType: "COLOR", valuesByMode: { p1: { r: 1, g: 1, b: 1, a: 1 } }, scopes: [], collectionId: "PC" },
+          { id: "K", name: "color/black", resolvedType: "COLOR", valuesByMode: { p1: { r: 0, g: 0, b: 0, a: 1 } }, scopes: [], collectionId: "PC" },
+        ],
+      },
+      {
+        id: "SEM", name: "semantic", defaultModeId: "light", modes: [{ modeId: "light", name: "light" }],
+        variables: [
+          { id: "BG", name: "color/bg", resolvedType: "COLOR", valuesByMode: { light: { type: "VARIABLE_ALIAS", id: "W" } }, scopes: [], collectionId: "SEM" },
+        ],
+      },
+    ],
+  };
+
+  it("treats an alias with the same target as unchanged", () => {
+    const parsed: ParsedModel = {
+      warnings: [],
+      collections: [{ name: "semantic", modeNames: ["light"], variables: [{ variableId: "BG", collectionName: "semantic", name: "color/bg", resolvedType: "COLOR", scopes: [], valuesByModeName: { light: { kind: "alias", targetCollection: "primitives/color", targetName: "color/white" } } }] }],
+    };
+    const plan = buildPlan(parsed, current);
+    expect(plan.unchangedCount).toBe(1);
+    expect(plan.ops).toEqual([]);
+  });
+
+  it("emits setAlias when the alias target changes", () => {
+    const parsed: ParsedModel = {
+      warnings: [],
+      collections: [{ name: "semantic", modeNames: ["light"], variables: [{ variableId: "BG", collectionName: "semantic", name: "color/bg", resolvedType: "COLOR", scopes: [], valuesByModeName: { light: { kind: "alias", targetCollection: "primitives/color", targetName: "color/black" } } }] }],
+    };
+    const plan = buildPlan(parsed, current);
+    expect(plan.updates).toEqual([{ collection: "semantic", name: "color/bg", modes: ["light"] }]);
+    expect(plan.ops.map((o) => o.kind)).toEqual(["setAlias"]);
   });
 });
