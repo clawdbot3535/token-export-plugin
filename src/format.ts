@@ -54,3 +54,14 @@ export function formatLiteral(value: unknown, resolved: FigmaResolvedType): unkn
   if (resolved === "BOOLEAN") return String(value);
   return value; // FLOAT -> number, STRING -> string
 }
+
+export function parseColor(c: FigmaColorValue): RGBA {
+  return { r: c.components[0], g: c.components[1], b: c.components[2], a: c.alpha };
+}
+
+export function parseLiteral(value: unknown, resolved: FigmaResolvedType): number | string | boolean | RGBA {
+  if (resolved === "COLOR") return parseColor(value as FigmaColorValue);
+  if (resolved === "BOOLEAN") return value === "true" || value === true;
+  if (resolved === "FLOAT") return Number(value);
+  return String(value);
+}
