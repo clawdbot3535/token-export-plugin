@@ -47,7 +47,11 @@ export async function applyPlan(plan: ImportPlan): Promise<ApplySummary> {
         summary.createdCollections += 1;
       } else if (op.kind === "addMode") {
         const col = colByName.get(op.collection);
-        if (col && !col.modes.some((m) => m.name.toLowerCase() === op.mode.toLowerCase())) col.addMode(op.mode);
+        if (!col) {
+          summary.errors.push(`addMode ${op.mode}: collection ${op.collection} not available`);
+          continue;
+        }
+        if (!col.modes.some((m) => m.name.toLowerCase() === op.mode.toLowerCase())) col.addMode(op.mode);
       } else if (op.kind === "createVariable") {
         const col = colByName.get(op.collection);
         if (!col) {
