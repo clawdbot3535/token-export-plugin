@@ -62,6 +62,30 @@ describe("buildPlan — alias target collection resolution", () => {
     expect(alias).toMatchObject({ targetCollection: "primitives/color", targetName: "color/white" });
   });
 
+  it("keeps the original target collection when the name is ambiguous across collections", () => {
+    const parsed: ParsedModel = {
+      warnings: [],
+      collections: [
+        {
+          name: "A", modeNames: ["Mode 1"],
+          variables: [{ collectionName: "A", name: "color/white", resolvedType: "COLOR", scopes: [], valuesByModeName: { "Mode 1": { kind: "literal", value: { r: 1, g: 1, b: 1, a: 1 } } } }],
+        },
+        {
+          name: "B", modeNames: ["Mode 1"],
+          variables: [{ collectionName: "B", name: "color/white", resolvedType: "COLOR", scopes: [], valuesByModeName: { "Mode 1": { kind: "literal", value: { r: 0, g: 0, b: 0, a: 1 } } } }],
+        },
+        {
+          name: "Theme", modeNames: ["Light"],
+          variables: [{ collectionName: "Theme", name: "color/bg", resolvedType: "COLOR", scopes: [], valuesByModeName: { Light: { kind: "alias", targetCollection: "primitives/color", targetName: "color/white" } } }],
+        },
+      ],
+    };
+    const plan = buildPlan(parsed, { collections: [] });
+    const alias = plan.ops.find((o) => o.kind === "setAlias");
+    // ambiguous (color/white in both A and B, neither named "primitives/color") → keep original
+    expect(alias).toMatchObject({ targetCollection: "primitives/color", targetName: "color/white" });
+  });
+
   it("resolves an alias target that already exists in the current Figma file", () => {
     const current: CollectedData = {
       collections: [

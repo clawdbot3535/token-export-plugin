@@ -86,7 +86,12 @@ function colorsEqual(a: { r: number; g: number; b: number; a?: number }, b: RGBA
   );
 }
 
-function sameValue(idx: CurrentIndex, current: CollectedValue, parsed: ParsedValue): boolean {
+function sameValue(
+  idx: CurrentIndex,
+  current: CollectedValue,
+  parsed: ParsedValue,
+  resolveTarget: (targetName: string, origCollection: string) => string,
+): boolean {
   if (parsed.kind === "alias") {
     if (!isAlias(current)) return false;
     // If the current alias points to a variable outside the local set (e.g. a
@@ -94,7 +99,10 @@ function sameValue(idx: CurrentIndex, current: CollectedValue, parsed: ParsedVal
     // the value reads as changed. Acceptable: v1 handles local variables only.
     const target = idx.byId.get(current.id);
     if (!target) return false;
-    return target.v.name === parsed.targetName && target.col.name === parsed.targetCollection;
+    return (
+      target.v.name === parsed.targetName &&
+      target.col.name === resolveTarget(parsed.targetName, parsed.targetCollection)
+    );
   }
   if (isAlias(current)) return false;
   const pv = parsed.value;
@@ -214,7 +222,7 @@ export function buildPlan(parsed: ParsedModel, current: CollectedData): ImportPl
             const modeId = modeIdFor(match.col, mode);
             return modeId === undefined ? undefined : match.v.valuesByMode[modeId];
           })();
-          if (cur !== undefined && sameValue(idx, cur, val)) continue;
+          if (cur !== undefined && sameValue(idx, cur, val, resolveTarget)) continue;
           pushValueOp(pc.name, pv.name, mode, val, setLiteralOps, setAliasOps, resolveTarget);
           changedModes.push(mode);
         }
