@@ -54,25 +54,30 @@ export function ImportPanel() {
     const input = e.target as HTMLInputElement;
     const list = input.files;
     if (!list || list.length === 0) return;
-    const files: ImportFile[] = [];
-    for (const f of Array.from(list)) {
-      const buf = new Uint8Array(await f.arrayBuffer());
-      if (f.name.endsWith(".zip")) {
-        const unzipped = unzipSync(buf);
-        for (const [name, bytes] of Object.entries(unzipped)) {
-          if (name.endsWith(".tokens.json")) files.push({ filename: name.split("/").pop() as string, json: strFromU8(bytes) });
+    try {
+      const files: ImportFile[] = [];
+      for (const f of Array.from(list)) {
+        const buf = new Uint8Array(await f.arrayBuffer());
+        if (f.name.endsWith(".zip")) {
+          const unzipped = unzipSync(buf);
+          for (const [name, bytes] of Object.entries(unzipped)) {
+            if (name.endsWith(".tokens.json")) files.push({ filename: name.split("/").pop() as string, json: strFromU8(bytes) });
+          }
+        } else if (f.name.endsWith(".json")) {
+          files.push({ filename: f.name, json: strFromU8(buf) });
         }
-      } else if (f.name.endsWith(".json")) {
-        files.push({ filename: f.name, json: strFromU8(buf) });
       }
+      input.value = "";
+      if (files.length === 0) {
+        setStatus("No *.tokens.json found in selection");
+        return;
+      }
+      setStatus("Reading files…");
+      emit("IMPORT_LOCAL", { files });
+    } catch (err) {
+      input.value = "";
+      setStatus(`Could not read files: ${err instanceof Error ? err.message : String(err)}`);
     }
-    input.value = "";
-    if (files.length === 0) {
-      setStatus("No *.tokens.json found in selection");
-      return;
-    }
-    setStatus("Reading files…");
-    emit("IMPORT_LOCAL", { files });
   }
 
   return (
