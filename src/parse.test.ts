@@ -79,4 +79,24 @@ describe("parse", () => {
     expect(model.warnings.some((w) => w.includes("spacing/x"))).toBe(true);
     expect(model.collections).toEqual([]);
   });
+
+  it("infers BOOLEAN from a W3C $type:boolean leaf without a resolvedType extension", () => {
+    const file = {
+      filename: "flags.tokens.json",
+      json: JSON.stringify({ flag: { on: { $type: "boolean", $value: "true", $extensions: { "com.figma.variableId": "B1", "com.figma.scopes": [] } } } }),
+    };
+    const model = parse([file]);
+    expect(model.collections[0].variables[0].resolvedType).toBe("BOOLEAN");
+    expect(model.collections[0].variables[0].valuesByModeName["Mode 1"]).toEqual({ kind: "literal", value: true });
+  });
+
+  it("warns and skips a leaf with a null value", () => {
+    const file = {
+      filename: "color.tokens.json",
+      json: JSON.stringify({ color: { x: { $type: "color", $value: null, $extensions: { "com.figma.variableId": "X", "com.figma.scopes": [], "com.figma.collectionName": "primitives/color", "com.figma.modeName": "Mode 1", "com.figma.resolvedType": "COLOR" } } } }),
+    };
+    const model = parse([file]);
+    expect(model.warnings.some((w) => w.includes("color/x"))).toBe(true);
+    expect(model.collections).toEqual([]);
+  });
 });

@@ -49,6 +49,7 @@ function resolvedTypeOf(ext: Record<string, unknown>, $type: string): FigmaResol
   if (fromExt === "COLOR" || fromExt === "FLOAT" || fromExt === "STRING" || fromExt === "BOOLEAN") return fromExt;
   if ($type === "color") return "COLOR";
   if ($type === "number") return "FLOAT";
+  if ($type === "boolean") return "BOOLEAN";
   return "STRING";
 }
 
@@ -102,7 +103,7 @@ export function parse(files: ImportFile[]): ParsedModel {
         value = { kind: "literal", value: literal };
       }
 
-      const key = variableId ?? `${collectionName} ${name}`;
+      const key = variableId ?? `${collectionName}\0${name}`;
       let pv = byKey.get(key);
       if (!pv) {
         pv = { variableId, collectionName, name, resolvedType, scopes, valuesByModeName: {} };
