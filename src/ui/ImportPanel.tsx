@@ -26,21 +26,25 @@ interface DoneSummary {
 export function ImportPanel() {
   const [plan, setPlan] = useState<PlanSummary | null>(null);
   const [status, setStatus] = useState("");
+  const [issues, setIssues] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const offPlan = on("IMPORT_PLAN", (p: PlanSummary) => {
       setPlan(p);
+      setIssues(p.warnings);
       const warn = p.warnings.length ? ` · ${p.warnings.length} warnings` : "";
       setStatus(`${p.creates} new · ${p.updates} changed · ${p.unchanged} unchanged${warn}`);
     });
     const offDone = on("IMPORT_DONE", (s: DoneSummary) => {
       setPlan(null);
+      setIssues(s.errors);
       const errs = s.errors.length ? ` · ${s.errors.length} errors` : "";
       setStatus(`Imported: +${s.createdVariables} vars, ${s.updatedVariables} updated, +${s.createdCollections} collections${errs}`);
     });
     const offErr = on("IMPORT_ERROR", (p: { kind: string; message: string }) => {
       setPlan(null);
+      setIssues([]);
       setStatus(`Import error (${p.kind}): ${p.message}`);
     });
     return () => {
@@ -130,6 +134,16 @@ export function ImportPanel() {
       ) : null}
       <VerticalSpace space="small" />
       <Text>{status}</Text>
+      {issues.length > 0 ? (
+        <div style={{ marginTop: 6, maxHeight: 120, overflowY: "auto", fontSize: 11, lineHeight: "15px", opacity: 0.8 }}>
+          {issues.slice(0, 50).map((msg, i) => (
+            <div key={i} style={{ wordBreak: "break-word" }}>
+              · {msg}
+            </div>
+          ))}
+          {issues.length > 50 ? <div>· …and {issues.length - 50} more</div> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
