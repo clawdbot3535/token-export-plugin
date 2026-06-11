@@ -92,4 +92,10 @@ describe("parseLiteral", () => {
     expect(parseLiteral("true", "BOOLEAN")).toBe(true);
     expect(parseLiteral("false", "BOOLEAN")).toBe(false);
   });
+  it("round-trips number/string/boolean through formatLiteral (parse ∘ format = identity)", () => {
+    expect(parseLiteral(formatLiteral(16, "FLOAT"), "FLOAT")).toBe(16);
+    expect(parseLiteral(formatLiteral("Inter", "STRING"), "STRING")).toBe("Inter");
+    expect(parseLiteral(formatLiteral(true, "BOOLEAN"), "BOOLEAN")).toBe(true);
+    expect(parseLiteral(formatLiteral(false, "BOOLEAN"), "BOOLEAN")).toBe(false);
+  });
 });
