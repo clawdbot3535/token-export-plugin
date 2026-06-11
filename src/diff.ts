@@ -248,13 +248,25 @@ export function buildPlan(parsed: ParsedModel, current: CollectedData): ImportPl
     }
   }
 
+  // Wrong-file guard: creating variables while matching none of an existing,
+  // non-empty file usually means importing into the wrong file (or one whose
+  // variables were recreated) — every component bound to the existing variables
+  // would keep pointing at untouched/stale variables instead of being updated.
+  const allWarnings = [...parsed.warnings, ...warnings];
+  const currentVarCount = current.collections.reduce((n, c) => n + c.variables.length, 0);
+  if (creates.length > 0 && updates.length === 0 && unchangedCount === 0 && currentVarCount > 0) {
+    allWarnings.unshift(
+      `${creates.length} variables would be created but none matched the ${currentVarCount} already in this file — this looks like the wrong file, or one whose variables were recreated. Existing component bindings will not be updated.`,
+    );
+  }
+
   return {
     collectionsToCreate,
     modesToAdd,
     creates,
     updates,
     unchangedCount,
-    warnings: [...parsed.warnings, ...warnings],
+    warnings: allWarnings,
     ops: [...createCollectionOps, ...addModeOps, ...createVariableOps, ...setLiteralOps, ...setAliasOps],
   };
 }
