@@ -12,6 +12,8 @@ import {
   type CommitRequest,
   type CommitResult,
   type GitProvider,
+  type ReadFile,
+  type ReadRequest,
 } from "./provider";
 
 const API = "https://api.github.com";
@@ -60,6 +62,21 @@ export function createGitHubProvider(fetchFn: typeof fetch = fetch): GitProvider
       throw mapHttpError(res.status, text);
     }
     return res.json();
+  }
+
+  async function callRaw(url: string, token: string): Promise<string> {
+    let res: Response;
+    try {
+      res = await fetchFn(url, { method: "GET", headers: { ...headers(token), Accept: "application/vnd.github.raw" } });
+    } catch (cause) {
+      const msg = cause instanceof Error ? cause.message : String(cause);
+      throw new CommitError("network", `Network error reaching api.github.com: ${msg}`);
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw mapHttpError(res.status, text);
+    }
+    return res.text();
   }
 
   /** Base commit sha for the branch, or null when the repo/branch has no commits yet. */
@@ -124,6 +141,27 @@ export function createGitHubProvider(fetchFn: typeof fetch = fetch): GitProvider
       await call("PATCH", `${base}/git/refs/heads/${req.branch}`, req.token, { sha: commit.sha });
 
       return { sha: commit.sha, commitUrl: commit.html_url };
+    },
+    async readFiles(req: ReadRequest): Promise<ReadFile[]> {
+      const base = `${API}/repos/${req.owner}/${req.repo}`;
+      const ref = encodeURIComponent(req.branch);
+      const dirUrl = req.path ? `${base}/contents/${req.path}?ref=${ref}` : `${base}/contents?ref=${ref}`;
+      const listing = await call("GET", dirUrl, req.token);
+      if (!Array.isArray(listing)) {
+        throw new CommitError("not-found", "Configured token path is a file, not a folder");
+      }
+      const entries = (listing as Array<{ type: string; name: string; path: string }>).filter(
+        (e) => e.type === "file" && e.name.endsWith(".tokens.json"),
+      );
+      if (entries.length === 0) {
+        throw new CommitError("no-tokens", "No *.tokens.json files found at the configured path");
+      }
+      const files: ReadFile[] = [];
+      for (const e of entries) {
+        const content = await callRaw(`${base}/contents/${e.path}?ref=${ref}`, req.token);
+        files.push({ filename: e.name, content });
+      }
+      return files;
     },
   };
 }

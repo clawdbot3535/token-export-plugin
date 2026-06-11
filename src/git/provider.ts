@@ -29,6 +29,7 @@ export type CommitErrorKind =
   | "auth"
   | "not-found"
   | "empty-repo"
+  | "no-tokens"
   | "network"
   | "unexpected";
 
@@ -41,4 +42,19 @@ export class CommitError extends Error {
 
 export interface GitProvider {
   commit(req: CommitRequest): Promise<CommitResult>;
+  readFiles(req: ReadRequest): Promise<ReadFile[]>;
+}
+
+export interface ReadRequest {
+  owner: string;
+  repo: string;
+  branch: string;
+  /** Repo-relative folder; "" = repo root. */
+  path: string;
+  token: string;
+}
+
+export interface ReadFile {
+  filename: string;
+  content: string;
 }
