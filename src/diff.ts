@@ -103,9 +103,24 @@ function sameValue(idx: CurrentIndex, current: CollectedValue, parsed: ParsedVal
   return false;
 }
 
-function pushValueOp(collection: string, name: string, mode: string, val: ParsedValue, lit: ApplyOp[], ali: ApplyOp[]): void {
+function pushValueOp(
+  collection: string,
+  name: string,
+  mode: string,
+  val: ParsedValue,
+  lit: ApplyOp[],
+  ali: ApplyOp[],
+  resolveTarget: (targetName: string, origCollection: string) => string,
+): void {
   if (val.kind === "alias") {
-    ali.push({ kind: "setAlias", collection, name, mode, targetCollection: val.targetCollection, targetName: val.targetName });
+    ali.push({
+      kind: "setAlias",
+      collection,
+      name,
+      mode,
+      targetCollection: resolveTarget(val.targetName, val.targetCollection),
+      targetName: val.targetName,
+    });
   } else {
     lit.push({ kind: "setLiteral", collection, name, mode, value: val.value });
   }
@@ -113,6 +128,35 @@ function pushValueOp(collection: string, name: string, mode: string, val: Parsed
 
 export function buildPlan(parsed: ParsedModel, current: CollectedData): ImportPlan {
   const idx = indexCurrent(current);
+
+  // Index every known variable NAME -> the collections that contain it, across
+  // both the parsed model and the current Figma file. Legacy files (no
+  // com.figma.collectionName) reconstruct an alias TARGET under a filename
+  // fallback collection, so the alias's original collection name (from
+  // aliasData) won't match — resolve the target collection by variable name.
+  const colsByVarName = new Map<string, Set<string>>();
+  const addVarName = (name: string, collection: string): void => {
+    let set = colsByVarName.get(name);
+    if (!set) {
+      set = new Set();
+      colsByVarName.set(name, set);
+    }
+    set.add(collection);
+  };
+  for (const pc of parsed.collections) for (const pv of pc.variables) addVarName(pv.name, pc.name);
+  for (const col of current.collections) for (const v of col.variables) addVarName(v.name, col.name);
+
+  // Prefer the original collection if it actually holds the target; else, if
+  // exactly one collection holds a variable of that name, use it; otherwise
+  // keep the original (figma-write will report an unresolved target).
+  const resolveTarget = (targetName: string, orig: string): string => {
+    const cols = colsByVarName.get(targetName);
+    if (!cols || cols.size === 0) return orig;
+    if (cols.has(orig)) return orig;
+    if (cols.size === 1) return [...cols][0];
+    return orig;
+  };
+
   const createCollectionOps: ApplyOp[] = [];
   const addModeOps: ApplyOp[] = [];
   const createVariableOps: ApplyOp[] = [];
@@ -155,7 +199,7 @@ export function buildPlan(parsed: ParsedModel, current: CollectedData): ImportPl
         createVariableOps.push({ kind: "createVariable", collection: pc.name, name: pv.name, type: pv.resolvedType });
         const modes: string[] = [];
         for (const [mode, val] of Object.entries(pv.valuesByModeName)) {
-          pushValueOp(pc.name, pv.name, mode, val, setLiteralOps, setAliasOps);
+          pushValueOp(pc.name, pv.name, mode, val, setLiteralOps, setAliasOps, resolveTarget);
           modes.push(mode);
         }
         creates.push({ collection: pc.name, name: pv.name, modes });
@@ -171,7 +215,7 @@ export function buildPlan(parsed: ParsedModel, current: CollectedData): ImportPl
             return modeId === undefined ? undefined : match.v.valuesByMode[modeId];
           })();
           if (cur !== undefined && sameValue(idx, cur, val)) continue;
-          pushValueOp(pc.name, pv.name, mode, val, setLiteralOps, setAliasOps);
+          pushValueOp(pc.name, pv.name, mode, val, setLiteralOps, setAliasOps, resolveTarget);
           changedModes.push(mode);
         }
         // Additive sync: modes/variables present only in Figma (not in the
