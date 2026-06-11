@@ -6,6 +6,7 @@ import { useEffect, useState } from "preact/hooks";
 import type { ExportResult } from "./export";
 import type { Settings } from "./settings";
 import { timestampedZipName } from "./timestamp";
+import { ImportPanel } from "./ui/ImportPanel";
 
 const EMPTY: Settings = { owner: "", repo: "", branch: "main", path: "tokens" };
 
@@ -112,6 +113,8 @@ function Plugin() {
       </Button>
       <VerticalSpace space="small" />
       <Text>{status}</Text>
+      <VerticalSpace space="medium" />
+      <ImportPanel />
     </Container>
   );
 }

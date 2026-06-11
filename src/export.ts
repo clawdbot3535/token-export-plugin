@@ -132,6 +132,9 @@ export function buildExport(data: CollectedData): ExportResult {
         const extensions: Record<string, unknown> = {
           "com.figma.variableId": v.id,
           "com.figma.scopes": v.scopes,
+          "com.figma.collectionName": col.name,
+          "com.figma.modeName": mode.name,
+          "com.figma.resolvedType": v.resolvedType,
         };
 
         let value: unknown;

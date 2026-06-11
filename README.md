@@ -41,6 +41,22 @@ offline snapshot you drag into the inspector.
 
 **Download .zip** still works as an offline snapshot (filename `tokens-YYYYMMDD-HHMMSS.zip`).
 
+## Import (repo → Figma)
+
+Pull tokens back into the current Figma file:
+
+1. **Preview from GitHub** — reads `*.tokens.json` from the configured
+   owner/repo/branch/path (PAT needs **Contents: read**, covered by the write
+   scope), or **Preview from file…** to pick a `tokens.zip` / `.json` files.
+2. Review the diff (new / changed / unchanged counts + warnings).
+3. **Apply to Figma** — existing variables are updated in place (matched by
+   `com.figma.variableId`, then collection+name); missing ones are created;
+   alias relationships are reconstructed. Nothing is deleted. Use **Cmd+Z** to undo.
+
+Exports now embed `com.figma.collectionName` / `modeName` / `resolvedType` in each
+token's `$extensions` so a round-trip reconstructs collections, modes, and booleans
+losslessly. Files exported by older versions still import via filename inference.
+
 ## Architecture
 
 - `src/format.ts`, `src/mapping.ts`, `src/export.ts` — pure, unit-tested token core.
@@ -53,8 +69,7 @@ offline snapshot you drag into the inspector.
 ## Limitations (v1)
 
 - Local variables only (no styles, no remote/library variables).
-- GitHub commit is one-way (Figma → repo) via PAT; OAuth, GitLab/other providers, and pulling
-  tokens back into Figma are not implemented.
+- GitHub sync via PAT; OAuth and GitLab/other providers are not implemented.
 - The collection→filename mapping in `src/mapping.ts` assumes collection names containing
   `color`/`dimension`/`typography`/`global` and `light`/`dark` modes. Adjust the constants there if
   your file uses different names.

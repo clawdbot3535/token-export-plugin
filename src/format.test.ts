@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { channelToHex, formatColor, formatLiteral, toHex, tokenTypeFor } from "./format";
+import { channelToHex, formatColor, formatLiteral, parseColor, parseLiteral, toHex, tokenTypeFor } from "./format";
 
 describe("channelToHex", () => {
   it("converts 0..1 float channels to 2-digit uppercase hex", () => {
@@ -63,5 +63,39 @@ describe("formatLiteral", () => {
   });
   it("stringifies booleans", () => {
     expect(formatLiteral(true, "BOOLEAN")).toBe("true");
+  });
+});
+
+describe("parseColor", () => {
+  it("reverses formatColor into RGBA", () => {
+    expect(parseColor({ colorSpace: "srgb", components: [1, 1, 1], alpha: 1, hex: "#FFFFFF" })).toEqual({
+      r: 1, g: 1, b: 1, a: 1,
+    });
+  });
+  it("round-trips an arbitrary color (parse ∘ format = identity)", () => {
+    const rgba = { r: 0.15, g: 0.39, b: 0.92, a: 0.5 };
+    expect(parseColor(formatColor(rgba))).toEqual(rgba);
+  });
+});
+
+describe("parseLiteral", () => {
+  it("parses color objects to RGBA", () => {
+    expect(parseLiteral({ colorSpace: "srgb", components: [0, 0, 0], alpha: 1, hex: "#000000" }, "COLOR")).toEqual({
+      r: 0, g: 0, b: 0, a: 1,
+    });
+  });
+  it("passes numbers and strings through", () => {
+    expect(parseLiteral(16, "FLOAT")).toBe(16);
+    expect(parseLiteral("Inter", "STRING")).toBe("Inter");
+  });
+  it("parses boolean strings back to boolean", () => {
+    expect(parseLiteral("true", "BOOLEAN")).toBe(true);
+    expect(parseLiteral("false", "BOOLEAN")).toBe(false);
+  });
+  it("round-trips number/string/boolean through formatLiteral (parse ∘ format = identity)", () => {
+    expect(parseLiteral(formatLiteral(16, "FLOAT"), "FLOAT")).toBe(16);
+    expect(parseLiteral(formatLiteral("Inter", "STRING"), "STRING")).toBe("Inter");
+    expect(parseLiteral(formatLiteral(true, "BOOLEAN"), "BOOLEAN")).toBe(true);
+    expect(parseLiteral(formatLiteral(false, "BOOLEAN"), "BOOLEAN")).toBe(false);
   });
 });

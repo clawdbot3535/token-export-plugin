@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createGitHubProvider } from "./github";
-import type { CommitRequest } from "./provider";
+import type { CommitRequest, ReadRequest } from "./provider";
 
 function req(files = 2): CommitRequest {
   return {
@@ -126,5 +126,47 @@ describe("createGitHubProvider.commit — errors", () => {
   it("maps a thrown fetch to network", async () => {
     const { fn } = mockFetch({ "/git/ref/heads/": { status: -1 } });
     await expect(createGitHubProvider(fn).commit(req())).rejects.toMatchObject({ kind: "network" });
+  });
+});
+
+function readReq(path = "tokens"): ReadRequest {
+  return { owner: "me", repo: "tokens", branch: "main", path, token: "TKN" };
+}
+
+describe("createGitHubProvider.readFiles", () => {
+  it("lists *.tokens.json in the folder and fetches raw content", async () => {
+    const calls: Array<{ url: string; accept?: string }> = [];
+    const fn = (async (url: string, init?: any): Promise<Response> => {
+      calls.push({ url, accept: init?.headers?.Accept });
+      if (url.includes("/contents/tokens?ref=")) {
+        return new Response(
+          JSON.stringify([
+            { type: "file", name: "color.tokens.json", path: "tokens/color.tokens.json" },
+            { type: "file", name: "README.md", path: "tokens/README.md" },
+          ]),
+          { status: 200 },
+        );
+      }
+      if (url.includes("color.tokens.json")) return new Response('{"color":{}}', { status: 200 });
+      throw new Error(`unexpected ${url}`);
+    }) as unknown as typeof fetch;
+
+    const files = await createGitHubProvider(fn).readFiles(readReq());
+    expect(files).toEqual([{ filename: "color.tokens.json", content: '{"color":{}}' }]);
+    const raw = calls.find((c) => c.url.includes("color.tokens.json"))!;
+    expect(raw.accept).toBe("application/vnd.github.raw");
+  });
+
+  it("throws no-tokens when the folder has no token files", async () => {
+    const fn = (async () =>
+      new Response(JSON.stringify([{ type: "file", name: "README.md", path: "tokens/README.md" }]), {
+        status: 200,
+      })) as unknown as typeof fetch;
+    await expect(createGitHubProvider(fn).readFiles(readReq())).rejects.toMatchObject({ kind: "no-tokens" });
+  });
+
+  it("maps 404 to not-found", async () => {
+    const fn = (async () => new Response("", { status: 404 })) as unknown as typeof fetch;
+    await expect(createGitHubProvider(fn).readFiles(readReq())).rejects.toMatchObject({ kind: "not-found" });
   });
 });

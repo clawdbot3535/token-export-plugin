@@ -71,3 +71,11 @@ six-file model.
 
 Layer derivation for option A: `primitives/*` → primitive · `semantic` → semantic
 (light/dark modes) · `components/*` + `layout/*` → component.
+
+## Import: legacy files without self-describing extensions
+
+Token files exported before the import feature lack
+`com.figma.collectionName` / `modeName` / `resolvedType`. On import these fall back
+to filename-based collection/mode inference (e.g. `light.tokens.json` → a `Theme`
+collection's `Light` mode), and BOOLEAN variables reconstruct as strings. Re-export
+once with the current version to make future round-trips lossless.
