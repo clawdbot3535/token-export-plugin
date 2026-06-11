@@ -39,6 +39,9 @@ describe("buildExport — literals", () => {
       $extensions: {
         "com.figma.variableId": "V1",
         "com.figma.scopes": ["ALL_SCOPES"],
+        "com.figma.collectionName": "primitives/color",
+        "com.figma.modeName": "Mode 1",
+        "com.figma.resolvedType": "COLOR",
       },
     });
   });
@@ -68,7 +71,13 @@ describe("buildExport — literals", () => {
     expect(tree.spacing["0"]).toEqual({
       $type: "number",
       $value: 0,
-      $extensions: { "com.figma.variableId": "V2", "com.figma.scopes": ["ALL_SCOPES"] },
+      $extensions: {
+        "com.figma.variableId": "V2",
+        "com.figma.scopes": ["ALL_SCOPES"],
+        "com.figma.collectionName": "primitives/dimension",
+        "com.figma.modeName": "Mode 1",
+        "com.figma.resolvedType": "FLOAT",
+      },
     });
   });
 
@@ -160,6 +169,9 @@ describe("buildExport — aliases", () => {
       $extensions: {
         "com.figma.variableId": "BG",
         "com.figma.scopes": ["ALL_SCOPES"],
+        "com.figma.collectionName": "semantic",
+        "com.figma.modeName": "light",
+        "com.figma.resolvedType": "COLOR",
         "com.figma.aliasData": {
           targetVariableName: "color/white",
           targetVariableSetName: "primitives/color",
