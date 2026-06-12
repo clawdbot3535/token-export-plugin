@@ -61,6 +61,8 @@ export function createGitLabProvider(host: string, fetchFn: typeof fetch = fetch
   }
 
   function treeUrl(project: string, folder: string, branch: string): string {
+    // per_page=100 (GitLab's max single page) is ample for the six token files;
+    // pagination is intentionally out of scope (see the GitLab support spec).
     const q = `ref=${encodeURIComponent(branch)}&per_page=100${folder ? `&path=${encodeURIComponent(folder)}` : ""}`;
     return `${base}/projects/${project}/repository/tree?${q}`;
   }
@@ -77,6 +79,9 @@ export function createGitLabProvider(host: string, fetchFn: typeof fetch = fetch
   return {
     async commit(req: CommitRequest): Promise<CommitResult> {
       const project = encodeURIComponent(`${req.owner}/${req.repo}`);
+      // All token files share one folder (buildExport emits the six flat
+      // *.tokens.json files; main.ts writes them all under the configured path),
+      // so deriving the folder from the first file is sufficient.
       const folder = req.files.length ? folderOf(req.files[0].path) : "";
       const existing = await existingPaths(project, folder, req.branch, req.token);
       const actions = req.files.map((f) => ({
