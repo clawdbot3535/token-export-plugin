@@ -57,6 +57,22 @@ Exports now embed `com.figma.collectionName` / `modeName` / `resolvedType` in ea
 token's `$extensions` so a round-trip reconstructs collections, modes, and booleans
 losslessly. Files exported by older versions still import via filename inference.
 
+## GitLab
+
+Select **GitLab** as the provider in the plugin. It works like GitHub (commit + import):
+
+1. Create a **Personal Access Token** with the `api` scope (or
+   `read_repository` + `write_repository`).
+2. Fill in **owner** (the group, e.g. `group` or `group/subgroup`), **repo** (the
+   project), **branch**, **path**, and the **host** (blank = `gitlab.com`).
+3. Commit / import as usual. A brand-new empty project is initialized on the first
+   commit (GitLab creates the branch and files in one commit).
+
+**Self-hosted GitLab:** Figma only allows network requests to domains listed in
+the manifest. Add your instance to `package.json` →
+`figma-plugin.networkAccess.allowedDomains` (e.g. `"https://gitlab.example.com"`)
+and run `npm run build`, then re-import the manifest in Figma.
+
 ## Architecture
 
 - `src/format.ts`, `src/mapping.ts`, `src/export.ts` — pure, unit-tested token core.
@@ -69,7 +85,7 @@ losslessly. Files exported by older versions still import via filename inference
 ## Limitations (v1)
 
 - Local variables only (no styles, no remote/library variables).
-- GitHub sync via PAT; OAuth and GitLab/other providers are not implemented.
+- GitHub and GitLab sync via PAT; OAuth and other providers are not implemented.
 - The collection→filename mapping in `src/mapping.ts` assumes collection names containing
   `color`/`dimension`/`typography`/`global` and `light`/`dark` modes. Adjust the constants there if
   your file uses different names.

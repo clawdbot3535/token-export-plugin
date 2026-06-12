@@ -29,8 +29,8 @@
     "ui": "src/ui.tsx",
     "documentAccess": "dynamic-page",
     "networkAccess": {
-      "allowedDomains": ["https://api.github.com"],
-      "reasoning": "Commit exported design tokens to the configured GitHub repository."
+      "allowedDomains": ["https://api.github.com", "https://gitlab.com"],
+      "reasoning": "Commit and read design tokens to/from the configured GitHub or GitLab repository. Self-hosted GitLab instances must be added here."
     }
   }
 }
