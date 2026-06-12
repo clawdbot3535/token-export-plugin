@@ -6,9 +6,9 @@ import {
   type CollectedValue,
   type CollectedVariable,
 } from "./export";
-import { createGitHubProvider } from "./git/github";
+import { selectProvider } from "./git/select";
 import { CommitError, type GitFile } from "./git/provider";
-import { normalizePath, type Settings, validateSettings } from "./settings";
+import { normalizePath, type Settings, validateSettings, withDefaults } from "./settings";
 import { buildPlan, type ImportPlan } from "./diff";
 import { applyPlan } from "./figma-write";
 import { type ImportFile, parse } from "./parse";
@@ -47,7 +47,7 @@ async function collectData(): Promise<CollectedData> {
 async function loadSettings(): Promise<{ settings: Settings | null; tokenSet: boolean }> {
   const settings = (await figma.clientStorage.getAsync(SETTINGS_KEY)) as Settings | undefined;
   const token = (await figma.clientStorage.getAsync(TOKEN_KEY)) as string | undefined;
-  return { settings: settings ?? null, tokenSet: Boolean(token) };
+  return { settings: settings ? withDefaults(settings) : null, tokenSet: Boolean(token) };
 }
 
 function planSummary(plan: ImportPlan) {
@@ -98,14 +98,15 @@ export default function (): void {
   let lastImportFiles: ImportFile[] | null = null;
 
   on("IMPORT_GITHUB", async function () {
-    const settings = (await figma.clientStorage.getAsync(SETTINGS_KEY)) as Settings | undefined;
+    const stored = (await figma.clientStorage.getAsync(SETTINGS_KEY)) as Settings | undefined;
     const token = (await figma.clientStorage.getAsync(TOKEN_KEY)) as string | undefined;
-    if (!settings || !token) {
+    if (!stored || !token) {
       emit("IMPORT_ERROR", { kind: "auth", message: "Configure repo settings and a token first" });
       return;
     }
+    const settings = withDefaults(stored);
     try {
-      const read = await createGitHubProvider().readFiles({
+      const read = await selectProvider(settings).readFiles({
         owner: settings.owner,
         repo: settings.repo,
         branch: settings.branch,
@@ -146,12 +147,13 @@ export default function (): void {
   });
 
   on("COMMIT", async function (payload: { message?: string }) {
-    const settings = (await figma.clientStorage.getAsync(SETTINGS_KEY)) as Settings | undefined;
+    const stored = (await figma.clientStorage.getAsync(SETTINGS_KEY)) as Settings | undefined;
     const token = (await figma.clientStorage.getAsync(TOKEN_KEY)) as string | undefined;
-    if (!settings || !token) {
+    if (!stored || !token) {
       emit("COMMIT_ERROR", { kind: "auth", message: "Configure repo settings and a token first" });
       return;
     }
+    const settings = withDefaults(stored);
     try {
       const { files } = buildExport(await collectData());
       const path = normalizePath(settings.path);
@@ -163,7 +165,7 @@ export default function (): void {
         payload.message && payload.message.trim()
           ? payload.message.trim()
           : `Update design tokens (${files.length} files) — ${new Date().toISOString()}`;
-      const result = await createGitHubProvider().commit({
+      const result = await selectProvider(settings).commit({
         owner: settings.owner,
         repo: settings.repo,
         branch: settings.branch,

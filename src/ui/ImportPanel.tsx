@@ -92,11 +92,11 @@ export function ImportPanel() {
         secondary
         fullWidth
         onClick={() => {
-          setStatus("Reading from GitHub…");
+          setStatus("Reading from repo…");
           emit("IMPORT_GITHUB");
         }}
       >
-        Preview from GitHub
+        Preview from repo
       </Button>
       <VerticalSpace space="small" />
       <Button secondary fullWidth onClick={() => fileRef.current?.click()}>
