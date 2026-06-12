@@ -1,14 +1,14 @@
 import { Button, Container, render, Text, Textbox, VerticalSpace } from "@create-figma-plugin/ui";
 import { emit, on } from "@create-figma-plugin/utilities";
 import { strToU8, zipSync } from "fflate";
-import { h } from "preact";
+import { Fragment, h } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import type { ExportResult } from "./export";
 import type { Settings } from "./settings";
 import { timestampedZipName } from "./timestamp";
 import { ImportPanel } from "./ui/ImportPanel";
 
-const EMPTY: Settings = { owner: "", repo: "", branch: "main", path: "tokens" };
+const EMPTY: Settings = { provider: "github", owner: "", repo: "", branch: "main", path: "tokens", host: "" };
 
 function download(files: ExportResult["files"]): void {
   const entries: Record<string, Uint8Array> = {};
@@ -61,9 +61,26 @@ function Plugin() {
   return (
     <Container space="medium">
       <VerticalSpace space="medium" />
-      <Text>GitHub target</Text>
+      <Text>Git provider</Text>
       <VerticalSpace space="small" />
-      <Textbox onValueInput={set("owner")} value={s.owner} placeholder="owner" />
+      <div style={{ display: "flex", gap: 6 }}>
+        <Button secondary={s.provider !== "github"} onClick={() => setS({ ...s, provider: "github" })}>
+          GitHub
+        </Button>
+        <Button secondary={s.provider !== "gitlab"} onClick={() => setS({ ...s, provider: "gitlab" })}>
+          GitLab
+        </Button>
+      </div>
+      <VerticalSpace space="small" />
+      {s.provider === "gitlab" ? (
+        <Fragment>
+          <Textbox onValueInput={set("host")} value={s.host} placeholder="https://gitlab.com (or your instance)" />
+          <VerticalSpace space="small" />
+          <Text>Self-hosted: add your host to package.json networkAccess and rebuild.</Text>
+          <VerticalSpace space="small" />
+        </Fragment>
+      ) : null}
+      <Textbox onValueInput={set("owner")} value={s.owner} placeholder={s.provider === "gitlab" ? "group (or group/subgroup)" : "owner"} />
       <VerticalSpace space="small" />
       <Textbox onValueInput={set("repo")} value={s.repo} placeholder="repo" />
       <VerticalSpace space="small" />
@@ -98,7 +115,7 @@ function Plugin() {
           emit("COMMIT", {});
         }}
       >
-        Commit to GitHub
+        {`Commit to ${s.provider === "gitlab" ? "GitLab" : "GitHub"}`}
       </Button>
       <VerticalSpace space="small" />
       <Button
