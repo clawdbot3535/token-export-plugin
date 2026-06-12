@@ -91,7 +91,13 @@ function Plugin() {
       <input
         type="password"
         value={tokenInput}
-        placeholder={tokenSet ? "token set — paste to replace" : "fine-grained PAT (Contents: write)"}
+        placeholder={
+          tokenSet
+            ? "token set — paste to replace"
+            : s.provider === "gitlab"
+              ? "PAT (api or write_repository scope)"
+              : "fine-grained PAT (Contents: write)"
+        }
         onInput={(e) => setTokenInput((e.target as HTMLInputElement).value)}
         style={{ width: "100%", boxSizing: "border-box", padding: "6px 8px" }}
       />
