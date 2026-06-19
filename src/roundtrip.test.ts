@@ -47,6 +47,10 @@ const STATE0: CollectedData = {
   ],
 };
 
+// NOTE on fidelity scope: canonicalize() strips com.figma.scopes before comparing,
+// so this test does NOT verify scope round-tripping — applyPlan never writes scopes,
+// so variable scopes are dropped on import (a documented v1 limitation). STATE0
+// carries non-empty scopes only to exercise the rest of the pipeline.
 describe("import round-trip fidelity", () => {
   it("export -> parse -> buildPlan -> applyPlan -> collect -> export is canonically identical", async () => {
     const files0 = buildExport(STATE0);

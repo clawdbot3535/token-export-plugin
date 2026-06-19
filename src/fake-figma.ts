@@ -116,6 +116,10 @@ export function createFakeFigma(initial: CollectedData = { collections: [] }): F
 
   const figma: FakeFigma = {
     variables: {
+      // Returns live collection handles (matches real Figma): the array is
+      // shallow-copied but the FakeCollection objects are the live instances, so
+      // mutations from later createVariable/addMode calls stay visible to a
+      // caller (e.g. collect()) holding a reference. Do not deep-copy.
       getLocalVariableCollectionsAsync: () => Promise.resolve([...collections]),
       getVariableByIdAsync: (id) => Promise.resolve(varById.get(id) ?? null),
       createVariableCollection(name) {

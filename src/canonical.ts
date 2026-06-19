@@ -24,7 +24,9 @@ function clean(node: unknown): unknown {
           if (STRIP_EXTENSION_KEYS.has(ek)) continue;
           cleanedExt[ek] = clean(ext[ek]);
         }
-        out[key] = cleanedExt;
+        // Omit an emptied $extensions entirely, so a leaf whose only extensions
+        // were stripped compares equal to one that never carried $extensions.
+        if (Object.keys(cleanedExt).length > 0) out[key] = cleanedExt;
         continue;
       }
       out[key] = clean(obj[key]);
