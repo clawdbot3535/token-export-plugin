@@ -356,4 +356,27 @@ describe("buildExport — prefix-collision collapse", () => {
     const tree = JSON.parse(buildExport(data).files[0].json);
     expect(tree.surface.base.$extensions["com.figma.aliasData"].targetVariableName).toBe("color/white/DEFAULT");
   });
+
+  it("warns when a genuine <name>/DEFAULT variable collides with a collapsed leaf", () => {
+    const clash: CollectedData = {
+      collections: [
+        {
+          id: "VariableCollectionId:c",
+          name: "color",
+          defaultModeId: "m1",
+          modes: [{ modeId: "m1", name: "Mode 1" }],
+          variables: [
+            { id: "VariableID:white", name: "color/white", resolvedType: "COLOR",
+              valuesByMode: { m1: { r: 1, g: 1, b: 1, a: 1 } }, scopes: [], collectionId: "VariableCollectionId:c" },
+            { id: "VariableID:white-a8", name: "color/white/alpha/500-8", resolvedType: "COLOR",
+              valuesByMode: { m1: { r: 1, g: 1, b: 1, a: 0.08 } }, scopes: [], collectionId: "VariableCollectionId:c" },
+            { id: "VariableID:white-def", name: "color/white/DEFAULT", resolvedType: "COLOR",
+              valuesByMode: { m1: { r: 0, g: 0, b: 0, a: 1 } }, scopes: [], collectionId: "VariableCollectionId:c" },
+          ],
+        },
+      ],
+    };
+    const { warnings } = buildExport(clash);
+    expect(warnings.some((w) => w.includes("color/white") && w.includes("DEFAULT"))).toBe(true);
+  });
 });

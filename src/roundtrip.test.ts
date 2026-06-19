@@ -109,6 +109,37 @@ describe("import round-trip fidelity", () => {
     expect(canonicalize(buildExport(state1).files)).toEqual(canonicalize(files0.files));
   });
 
+  it("round-trips a multi-level prefix chain (a, a/b, a/b/c)", async () => {
+    const CHAIN: CollectedData = {
+      collections: [
+        {
+          id: "VariableCollectionId:c",
+          name: "primitives/color",
+          defaultModeId: "m1",
+          modes: [{ modeId: "m1", name: "Mode 1" }],
+          variables: [
+            { id: "VariableID:a", name: "a", resolvedType: "STRING",
+              valuesByMode: { m1: "va" }, scopes: [], collectionId: "VariableCollectionId:c" },
+            { id: "VariableID:ab", name: "a/b", resolvedType: "STRING",
+              valuesByMode: { m1: "vab" }, scopes: [], collectionId: "VariableCollectionId:c" },
+            { id: "VariableID:abc", name: "a/b/c", resolvedType: "STRING",
+              valuesByMode: { m1: "vabc" }, scopes: [], collectionId: "VariableCollectionId:c" },
+          ],
+        },
+      ],
+    };
+    const files0 = buildExport(CHAIN);
+    const fake = createFakeFigma();
+    vi.stubGlobal("figma", fake.figma);
+    expect((await applyPlan(buildPlan(parse(files0.files), EMPTY))).errors).toEqual([]);
+
+    const state1 = await collect();
+    const names = state1.collections.flatMap((c) => c.variables.map((v) => v.name)).sort();
+    // both prefix leaves (a, a/b) restored to their bare names; no DEFAULT leaks
+    expect(names).toEqual(["a", "a/b", "a/b/c"]);
+    expect(canonicalize(buildExport(state1).files)).toEqual(canonicalize(files0.files));
+  });
+
   it("re-import of the produced files is a no-op (upsert idempotency)", async () => {
     const fake = createFakeFigma();
     vi.stubGlobal("figma", fake.figma);

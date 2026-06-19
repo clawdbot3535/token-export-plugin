@@ -128,6 +128,18 @@ export function buildExport(data: CollectedData): ExportResult {
   const ctx: ResolveCtx = { idToVar, idToCol };
   const collapsed = findCollapsedLeaves(data);
 
+  // Pathological case: a genuine "<name>/DEFAULT" variable already exists AND
+  // "<name>" is a collapsed prefix leaf — both want the same DTCG path, so one
+  // would be silently overwritten. Warn instead of dropping data unnoticed.
+  const allNames = new Set([...idToVar.values()].map((v) => v.name));
+  for (const name of collapsed) {
+    if (allNames.has(`${name}/DEFAULT`)) {
+      warnings.push(
+        `${name}: collides with an existing "${name}/DEFAULT" variable — the reserved DEFAULT key holds only one; rename to avoid dropping data on export`,
+      );
+    }
+  }
+
   for (const col of data.collections) {
     for (const mode of col.modes) {
       const filename = filenameFor(col.name, mode.name, col.modes.length);
