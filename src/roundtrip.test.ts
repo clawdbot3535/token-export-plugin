@@ -70,6 +70,45 @@ describe("import round-trip fidelity", () => {
     expect(canonicalize(files1.files)).toEqual(canonicalize(files0.files));
   });
 
+  it("round-trips a prefix-collision leaf, restoring the bare Figma name", async () => {
+    const COLLISION: CollectedData = {
+      collections: [
+        {
+          id: "VariableCollectionId:prim",
+          name: "primitives/color",
+          defaultModeId: "m1",
+          modes: [{ modeId: "m1", name: "Mode 1" }],
+          variables: [
+            { id: "VariableID:white", name: "color/white", resolvedType: "COLOR",
+              valuesByMode: { m1: { r: 1, g: 1, b: 1, a: 1 } }, scopes: [], collectionId: "VariableCollectionId:prim" },
+            { id: "VariableID:white-a8", name: "color/white/alpha/500-8", resolvedType: "COLOR",
+              valuesByMode: { m1: { r: 1, g: 1, b: 1, a: 0.08 } }, scopes: [], collectionId: "VariableCollectionId:prim" },
+            { id: "VariableID:overlay", name: "surface/overlay", resolvedType: "COLOR",
+              valuesByMode: { m1: { type: "VARIABLE_ALIAS", id: "VariableID:white-a8" } }, scopes: [], collectionId: "VariableCollectionId:prim" },
+            { id: "VariableID:base", name: "surface/base", resolvedType: "COLOR",
+              valuesByMode: { m1: { type: "VARIABLE_ALIAS", id: "VariableID:white" } }, scopes: [], collectionId: "VariableCollectionId:prim" },
+          ],
+        },
+      ],
+    };
+
+    const files0 = buildExport(COLLISION);
+    const fake = createFakeFigma();
+    vi.stubGlobal("figma", fake.figma);
+    const summary = await applyPlan(buildPlan(parse(files0.files), EMPTY));
+    expect(summary.errors).toEqual([]);
+
+    const state1 = await collect();
+    const names = state1.collections.flatMap((c) => c.variables.map((v) => v.name));
+    // the collapsed leaf is restored to its bare Figma name (NOT color/white/DEFAULT)…
+    expect(names).toContain("color/white");
+    expect(names).not.toContain("color/white/DEFAULT");
+    // …the deeper group survived the export (it was clobbered before this fix)…
+    expect(names).toContain("color/white/alpha/500-8");
+    // …and the exported set is canonically identical across the cycle.
+    expect(canonicalize(buildExport(state1).files)).toEqual(canonicalize(files0.files));
+  });
+
   it("re-import of the produced files is a no-op (upsert idempotency)", async () => {
     const fake = createFakeFigma();
     vi.stubGlobal("figma", fake.figma);
