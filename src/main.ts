@@ -1,11 +1,6 @@
 import { emit, on, showUI } from "@create-figma-plugin/utilities";
-import {
-  buildExport,
-  type CollectedCollection,
-  type CollectedData,
-  type CollectedValue,
-  type CollectedVariable,
-} from "./export";
+import { buildExport } from "./export";
+import { collect } from "./collect";
 import { selectProvider } from "./git/select";
 import { CommitError, type GitFile } from "./git/provider";
 import { normalizePath, type Settings, validateSettings, withDefaults } from "./settings";
@@ -16,33 +11,6 @@ import { type ImportFile, parse } from "./parse";
 const SETTINGS_KEY = "tokenexport.settings";
 const TOKEN_KEY = "tokenexport.token";
 
-async function collectData(): Promise<CollectedData> {
-  const collections = await figma.variables.getLocalVariableCollectionsAsync();
-  const out: CollectedCollection[] = [];
-  for (const col of collections) {
-    const variables: CollectedVariable[] = [];
-    for (const id of col.variableIds) {
-      const v = await figma.variables.getVariableByIdAsync(id);
-      if (!v) continue;
-      variables.push({
-        id: v.id,
-        name: v.name,
-        resolvedType: v.resolvedType,
-        valuesByMode: v.valuesByMode as Record<string, CollectedValue>,
-        scopes: v.scopes as unknown as string[],
-        collectionId: v.variableCollectionId,
-      });
-    }
-    out.push({
-      id: col.id,
-      name: col.name,
-      defaultModeId: col.defaultModeId,
-      modes: col.modes.map((m) => ({ modeId: m.modeId, name: m.name })),
-      variables,
-    });
-  }
-  return { collections: out };
-}
 
 async function loadSettings(): Promise<{ settings: Settings | null; tokenSet: boolean }> {
   const settings = (await figma.clientStorage.getAsync(SETTINGS_KEY)) as Settings | undefined;
@@ -89,7 +57,7 @@ export default function (): void {
 
   on("EXPORT_ZIP", async function () {
     try {
-      emit("ZIP_FILES", buildExport(await collectData()));
+      emit("ZIP_FILES", buildExport(await collect()));
     } catch (err) {
       emit("COMMIT_ERROR", { kind: "unexpected", message: err instanceof Error ? err.message : String(err) });
     }
@@ -115,7 +83,7 @@ export default function (): void {
       });
       const files: ImportFile[] = read.map((r) => ({ filename: r.filename, json: r.content }));
       lastImportFiles = files;
-      const plan = buildPlan(parse(files), await collectData());
+      const plan = buildPlan(parse(files), await collect());
       emit("IMPORT_PLAN", planSummary(plan));
     } catch (err) {
       emit("IMPORT_ERROR", importError(err));
@@ -125,7 +93,7 @@ export default function (): void {
   on("IMPORT_LOCAL", async function (payload: { files: ImportFile[] }) {
     try {
       lastImportFiles = payload.files;
-      const plan = buildPlan(parse(payload.files), await collectData());
+      const plan = buildPlan(parse(payload.files), await collect());
       emit("IMPORT_PLAN", planSummary(plan));
     } catch (err) {
       emit("IMPORT_ERROR", importError(err));
@@ -138,7 +106,7 @@ export default function (): void {
       return;
     }
     try {
-      const plan = buildPlan(parse(lastImportFiles), await collectData());
+      const plan = buildPlan(parse(lastImportFiles), await collect());
       const summary = await applyPlan(plan);
       emit("IMPORT_DONE", summary);
     } catch (err) {
@@ -155,7 +123,7 @@ export default function (): void {
     }
     const settings = withDefaults(stored);
     try {
-      const { files } = buildExport(await collectData());
+      const { files } = buildExport(await collect());
       const path = normalizePath(settings.path);
       const gitFiles: GitFile[] = files.map((f) => ({
         path: path ? `${path}/${f.filename}` : f.filename,
