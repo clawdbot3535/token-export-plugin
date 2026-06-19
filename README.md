@@ -92,6 +92,10 @@ Figma only allows network requests to domains listed in the manifest. `api.githu
 ## Limitations (v1)
 
 - Local variables only (no styles, no remote/library variables).
+- **Import does not write variable scopes.** `applyPlan` sets variable values and aliases but never
+  writes `com.figma.scopes`, so imported variables keep Figma's default scopes and any scope
+  configuration in the source token set is not restored. (Confirmed by the round-trip fidelity test,
+  which strips `com.figma.scopes` before comparing — see `src/roundtrip.test.ts`.)
 - GitHub and GitLab sync via PAT; OAuth and other providers are not implemented.
 - The collection→filename mapping in `src/mapping.ts` assumes collection names containing
   `color`/`dimension`/`typography`/`global` and `light`/`dark` modes. Adjust the constants there if
