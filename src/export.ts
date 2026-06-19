@@ -72,6 +72,20 @@ interface ResolveCtx {
   idToCol: Map<string, CollectedCollection>;
 }
 
+/** Variable names that are a strict path-prefix of another variable's name.
+ *  These cannot coexist with the deeper group at the same DTCG path, so the
+ *  exporter emits them under a reserved DEFAULT child key instead of clobbering
+ *  (or being clobbered by) the group. */
+export function findCollapsedLeaves(data: CollectedData): Set<string> {
+  const names: string[] = [];
+  for (const col of data.collections) for (const v of col.variables) names.push(v.name);
+  const collapsed = new Set<string>();
+  for (const a of names) {
+    if (names.some((b) => b.startsWith(`${a}/`))) collapsed.add(a);
+  }
+  return collapsed;
+}
+
 /** Pick the target collection's modeId matching the consuming mode name,
  *  else its default mode, else its first mode. */
 function resolveModeId(col: CollectedCollection, modeName: string): string {
@@ -112,6 +126,19 @@ export function buildExport(data: CollectedData): ExportResult {
     for (const v of col.variables) idToVar.set(v.id, v);
   }
   const ctx: ResolveCtx = { idToVar, idToCol };
+  const collapsed = findCollapsedLeaves(data);
+
+  // Pathological case: a genuine "<name>/DEFAULT" variable already exists AND
+  // "<name>" is a collapsed prefix leaf — both want the same DTCG path, so one
+  // would be silently overwritten. Warn instead of dropping data unnoticed.
+  const allNames = new Set([...idToVar.values()].map((v) => v.name));
+  for (const name of collapsed) {
+    if (allNames.has(`${name}/DEFAULT`)) {
+      warnings.push(
+        `${name}: collides with an existing "${name}/DEFAULT" variable — the reserved DEFAULT key holds only one; rename to avoid dropping data on export`,
+      );
+    }
+  }
 
   for (const col of data.collections) {
     for (const mode of col.modes) {
@@ -146,7 +173,7 @@ export function buildExport(data: CollectedData): ExportResult {
           const target = ctx.idToVar.get(raw.id);
           if (target) {
             extensions["com.figma.aliasData"] = {
-              targetVariableName: target.name,
+              targetVariableName: collapsed.has(target.name) ? `${target.name}/DEFAULT` : target.name,
               targetVariableSetName: ctx.idToCol.get(target.collectionId)?.name ?? "",
             };
           }
@@ -154,12 +181,14 @@ export function buildExport(data: CollectedData): ExportResult {
           value = formatLiteral(raw, v.resolvedType);
         }
 
+        if (collapsed.has(v.name)) extensions["com.figma.collapsedDefault"] = true;
         const leaf: TokenLeaf = {
           $type: tokenTypeFor(v.resolvedType),
           $value: value,
           $extensions: extensions,
         };
-        setNested(tree, v.name.split("/"), leaf);
+        const path = collapsed.has(v.name) ? [...v.name.split("/"), "DEFAULT"] : v.name.split("/");
+        setNested(tree, path, leaf);
       }
     }
   }

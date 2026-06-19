@@ -100,3 +100,57 @@ describe("parse", () => {
     expect(model.collections).toEqual([]);
   });
 });
+
+describe("parse — collapsed DEFAULT round-trip", () => {
+  it("restores the bare variable name from a com.figma.collapsedDefault leaf", () => {
+    const file = {
+      filename: "color.tokens.json",
+      json: JSON.stringify({
+        color: {
+          white: {
+            DEFAULT: {
+              $type: "color",
+              $value: { colorSpace: "srgb", components: [1, 1, 1], alpha: 1, hex: "#FFFFFF" },
+              $extensions: { "com.figma.collectionName": "color", "com.figma.modeName": "Mode 1", "com.figma.resolvedType": "COLOR", "com.figma.collapsedDefault": true },
+            },
+          },
+        },
+      }),
+    };
+    const model = parse([file]);
+    const names = model.collections.flatMap((c) => c.variables.map((v) => v.name));
+    expect(names).toContain("color/white");
+    expect(names).not.toContain("color/white/DEFAULT");
+  });
+
+  it("un-rewrites an alias target that points at a collapsed leaf", () => {
+    const file = {
+      filename: "color.tokens.json",
+      json: JSON.stringify({
+        color: {
+          white: {
+            DEFAULT: {
+              $type: "color",
+              $value: { colorSpace: "srgb", components: [1, 1, 1], alpha: 1, hex: "#FFFFFF" },
+              $extensions: { "com.figma.collectionName": "color", "com.figma.modeName": "Mode 1", "com.figma.resolvedType": "COLOR", "com.figma.collapsedDefault": true },
+            },
+          },
+        },
+        surface: {
+          base: {
+            $type: "color",
+            $value: { colorSpace: "srgb", components: [1, 1, 1], alpha: 1, hex: "#FFFFFF" },
+            $extensions: {
+              "com.figma.collectionName": "color", "com.figma.modeName": "Mode 1", "com.figma.resolvedType": "COLOR",
+              "com.figma.aliasData": { targetVariableName: "color/white/DEFAULT", targetVariableSetName: "color" },
+            },
+          },
+        },
+      }),
+    };
+    const model = parse([file]);
+    const surface = model.collections.flatMap((c) => c.variables).find((v) => v.name === "surface/base")!;
+    const val = Object.values(surface.valuesByModeName)[0];
+    expect(val).toEqual({ kind: "alias", targetCollection: "color", targetName: "color/white" });
+  });
+});

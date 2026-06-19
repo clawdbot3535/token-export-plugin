@@ -60,10 +60,33 @@ function walk(node: Record<string, unknown>, path: string[], visit: (path: strin
   }
 }
 
+/** Names (bare, minus the trailing DEFAULT segment) of leaves marked
+ *  com.figma.collapsedDefault — collected up front so alias/leaf ordering across
+ *  files doesn't matter when un-rewriting alias targets. */
+function collectCollapsedNames(files: ImportFile[]): Set<string> {
+  const names = new Set<string>();
+  for (const file of files) {
+    let tree: Record<string, unknown>;
+    try {
+      tree = JSON.parse(file.json) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    walk(tree, [], (path, leaf) => {
+      const ext = (leaf.$extensions ?? {}) as Record<string, unknown>;
+      if (ext["com.figma.collapsedDefault"] === true && path[path.length - 1] === "DEFAULT") {
+        names.add(path.slice(0, -1).join("/"));
+      }
+    });
+  }
+  return names;
+}
+
 export function parse(files: ImportFile[]): ParsedModel {
   const warnings: string[] = [];
   const byKey = new Map<string, ParsedVariable>();
   const collectionModes = new Map<string, Set<string>>();
+  const collapsedNames = collectCollapsedNames(files);
 
   for (const file of files) {
     let tree: Record<string, unknown>;
@@ -77,7 +100,8 @@ export function parse(files: ImportFile[]): ParsedModel {
 
     walk(tree, [], (path, leaf) => {
       const ext = (leaf.$extensions ?? {}) as Record<string, unknown>;
-      const name = path.join("/");
+      const collapsed = ext["com.figma.collapsedDefault"] === true && path[path.length - 1] === "DEFAULT";
+      const name = collapsed ? path.slice(0, -1).join("/") : path.join("/");
       const collectionName = (ext["com.figma.collectionName"] as string) || fallback.collection;
       const modeName = (ext["com.figma.modeName"] as string) || fallback.mode || "Mode 1";
       const resolvedType = resolvedTypeOf(ext, leaf.$type);
@@ -89,7 +113,10 @@ export function parse(files: ImportFile[]): ParsedModel {
 
       let value: ParsedValue;
       if (aliasData) {
-        value = { kind: "alias", targetCollection: aliasData.targetVariableSetName, targetName: aliasData.targetVariableName };
+        const rawTarget = aliasData.targetVariableName;
+        const bare = rawTarget.endsWith("/DEFAULT") ? rawTarget.slice(0, -"/DEFAULT".length) : rawTarget;
+        const targetName = collapsedNames.has(bare) ? bare : rawTarget;
+        value = { kind: "alias", targetCollection: aliasData.targetVariableSetName, targetName };
       } else {
         if (leaf.$value === null) {
           warnings.push(`${name}: null value in ${file.filename}, skipped`);

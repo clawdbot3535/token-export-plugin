@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildExport, type CollectedData } from "./export";
+import { buildExport, findCollapsedLeaves, type CollectedData } from "./export";
 
 function parse(files: { filename: string; json: string }[], name: string) {
   const f = files.find((x) => x.filename === name);
@@ -313,5 +313,70 @@ describe("buildExport — aliases", () => {
     expect(warnings.some((w) => w.includes("color/a") || w.includes("color/b"))).toBe(true);
     const tree = parse(files, "color.tokens.json");
     expect(tree.color.a.$value).toBeNull();
+  });
+});
+
+describe("buildExport — prefix-collision collapse", () => {
+  const data: CollectedData = {
+    collections: [
+      {
+        id: "VariableCollectionId:c",
+        name: "color",
+        defaultModeId: "m1",
+        modes: [{ modeId: "m1", name: "Mode 1" }],
+        variables: [
+          { id: "VariableID:white", name: "color/white", resolvedType: "COLOR",
+            valuesByMode: { m1: { r: 1, g: 1, b: 1, a: 1 } }, scopes: [], collectionId: "VariableCollectionId:c" },
+          { id: "VariableID:white-a8", name: "color/white/alpha/500-8", resolvedType: "COLOR",
+            valuesByMode: { m1: { r: 1, g: 1, b: 1, a: 0.08 } }, scopes: [], collectionId: "VariableCollectionId:c" },
+          { id: "VariableID:red500", name: "color/red/500", resolvedType: "COLOR",
+            valuesByMode: { m1: { r: 1, g: 0, b: 0, a: 1 } }, scopes: [], collectionId: "VariableCollectionId:c" },
+          { id: "VariableID:surface", name: "surface/base", resolvedType: "COLOR",
+            valuesByMode: { m1: { type: "VARIABLE_ALIAS", id: "VariableID:white" } }, scopes: [], collectionId: "VariableCollectionId:c" },
+        ],
+      },
+    ],
+  };
+
+  it("findCollapsedLeaves flags only names that prefix another variable", () => {
+    expect(findCollapsedLeaves(data)).toEqual(new Set(["color/white"]));
+  });
+
+  it("emits a colliding leaf under DEFAULT with a marker, keeping the deeper group", () => {
+    const tree = JSON.parse(buildExport(data).files[0].json);
+    expect(tree.color.white.$value).toBeUndefined(); // no longer a token node
+    expect(tree.color.white.DEFAULT.$value).toBeDefined();
+    expect(tree.color.white.DEFAULT.$extensions["com.figma.collapsedDefault"]).toBe(true);
+    expect(tree.color.white.alpha["500-8"].$value).toBeDefined();
+    expect(tree.color.red["500"].$value).toBeDefined(); // non-colliding leaf untouched
+    expect(tree.color.red["500"].DEFAULT).toBeUndefined();
+  });
+
+  it("rewrites alias targets that point at a collapsed leaf", () => {
+    const tree = JSON.parse(buildExport(data).files[0].json);
+    expect(tree.surface.base.$extensions["com.figma.aliasData"].targetVariableName).toBe("color/white/DEFAULT");
+  });
+
+  it("warns when a genuine <name>/DEFAULT variable collides with a collapsed leaf", () => {
+    const clash: CollectedData = {
+      collections: [
+        {
+          id: "VariableCollectionId:c",
+          name: "color",
+          defaultModeId: "m1",
+          modes: [{ modeId: "m1", name: "Mode 1" }],
+          variables: [
+            { id: "VariableID:white", name: "color/white", resolvedType: "COLOR",
+              valuesByMode: { m1: { r: 1, g: 1, b: 1, a: 1 } }, scopes: [], collectionId: "VariableCollectionId:c" },
+            { id: "VariableID:white-a8", name: "color/white/alpha/500-8", resolvedType: "COLOR",
+              valuesByMode: { m1: { r: 1, g: 1, b: 1, a: 0.08 } }, scopes: [], collectionId: "VariableCollectionId:c" },
+            { id: "VariableID:white-def", name: "color/white/DEFAULT", resolvedType: "COLOR",
+              valuesByMode: { m1: { r: 0, g: 0, b: 0, a: 1 } }, scopes: [], collectionId: "VariableCollectionId:c" },
+          ],
+        },
+      ],
+    };
+    const { warnings } = buildExport(clash);
+    expect(warnings.some((w) => w.includes("color/white") && w.includes("DEFAULT"))).toBe(true);
   });
 });
